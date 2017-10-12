@@ -215,7 +215,7 @@ int main() {
 
       if (s != "") {
         auto j = json::parse(s);
-
+        cout << "j=" << j << endl;
         string event = j[0].get<string>();
 
         if (event == "telemetry") {
@@ -301,9 +301,6 @@ int main() {
 
           for (size_t i = 0; i < pts.size(); i++) { // translate to car's point of view
             pts[i] = ref.toVehicleCoordinates(pts[i]);
-            //double shift_x = pts[i].x - ref_x, shift_y = pts[i].y - ref_y;
-            //pts[i].x = shift_x*cos(0 - ref_yaw) - shift_y*sin(0 - ref_yaw);
-            //pts[i].y = shift_x*sin(0 - ref_yaw) + shift_y*cos(0 - ref_yaw);
             cout << "to fit #" << i << ": (" << pts[i].x << "," << pts[i].y << ")" << endl;
           }
 
@@ -321,15 +318,11 @@ int main() {
           for (auto i = 1; i <= 50 - prev_sz; i++) {
             auto N = target_dist / (0.02*ref_vel / 2.24); // 0.02 seconds apart, convert to m/s
             auto x_pt = x_add_on + target_x / N;
-            auto y_pt = s(x_lpt);
+            auto y_pt = s(x_pt);
             x_add_on = x_pt;
 
             // translate back to global coords
             auto glb = ref.toGlobalCoordinates({ x_pt, y_pt });
-            //auto x_ref = x_pt, y_ref = y_pt;
-            //x_pt = x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw) + ref_x;
-            //y_pt = x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw) + ref_y;
-
             next_x_vals.push_back(glb.x); next_y_vals.push_back(glb.y);
             cout << "added pt #" << prev_sz + i << ": (" << glb.x << "," << glb.y << ")" << endl;
           }

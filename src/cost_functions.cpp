@@ -95,3 +95,17 @@ vector<double> JMT(vector< double> start, vector <double> end, double T)
   auto ss = VectorXd{ tt.inverse()*vv };
   return { start[0],start[1],start[2] / 2.0,ss[0],ss[1],ss[2] };
 }
+
+
+// from TrajectoryExercise2/helpers.py
+double logistic(double x) { return 2.0 / (1.0 + exp(-x)) - 1.0; }
+double toEquation(const vector<double>& coeffs, double x) {
+  auto total = 0.0;
+  for (auto i = 0; i < coeffs.size(); ++i) total += coeffs[i] * pow(x, i);
+  return total;
+}
+vector<double> differentiate(const vector<double>& coeffs) {
+  vector<double> diff;
+  for (auto i = 1; i < coeffs.size(); ++i) diff.push_back(i * coeffs[i]);
+  return diff;
+}
