@@ -10,6 +10,8 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
+#include "WayPoint.h"
+#include "Road.h"
 
 using namespace std;
 
@@ -134,23 +136,23 @@ vector<double> getFrenet(double x, double y, double theta, const vector<double> 
 }
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
-vector<double> getXY(double s, double d, const vector<double> &maps_s, const vector<double> &maps_x, const vector<double> &maps_y)
+Point getXY(double s, double d, const vector<WayPoint>& waypoints)
 {
 	int prev_wp = -1;
 
-	while(s > maps_s[prev_wp+1] && (prev_wp < (int)(maps_s.size()-1) ))
+	while(s > waypoints[prev_wp+1].s && (prev_wp < (int)(waypoints.size()-1) ))
 	{
 		prev_wp++;
 	}
 
-	int wp2 = (prev_wp+1)%maps_x.size();
+	int wp2 = (prev_wp+1)% waypoints.size();
 
-	double heading = atan2((maps_y[wp2]-maps_y[prev_wp]),(maps_x[wp2]-maps_x[prev_wp]));
+	double heading = atan2((waypoints[wp2].y- waypoints[prev_wp].y),(waypoints[wp2].x- waypoints[prev_wp].x));
 	// the x,y,s along the segment
-	double seg_s = (s-maps_s[prev_wp]);
+	double seg_s = (s- waypoints[prev_wp].s);
 
-	double seg_x = maps_x[prev_wp]+seg_s*cos(heading);
-	double seg_y = maps_y[prev_wp]+seg_s*sin(heading);
+	double seg_x = waypoints[prev_wp].x+seg_s*cos(heading);
+	double seg_y = waypoints[prev_wp].y+seg_s*sin(heading);
 
 	double perp_heading = heading-pi()/2;
 
@@ -161,49 +163,43 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 
 }
 
+tk::spline calcSpline(const vector<Point>& pts)
+{
+  vector<double> x, y;
+  for (auto pt : pts) { x.push_back(pt.x); y.push_back(pt.y); }
+  tk::spline s;
+  s.set_points(x, y);
+  return s;
+}
 
-void ReadWaypoints(vector<double> &map_waypoints_x, vector<double> &map_waypoints_y, vector<double> &map_waypoints_s, vector<double> &map_waypoints_dx, vector<double> &map_waypoints_dy)
+vector<WayPoint> ReadWaypoints()
 {
   // Waypoint map to read from
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
 
+  vector<WayPoint> ret;
+
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
   string line;
   while (getline(in_map_, line)) {
     istringstream iss(line);
-    double x;
-    double y;
-    float s;
-    float d_x;
-    float d_y;
-    iss >> x;
-    iss >> y;
-    iss >> s;
-    iss >> d_x;
-    iss >> d_y;
-    map_waypoints_x.push_back(x);
-    map_waypoints_y.push_back(y);
-    map_waypoints_s.push_back(s);
-    map_waypoints_dx.push_back(d_x);
-    map_waypoints_dy.push_back(d_y);
+    double x, y, s, dx, dy;
+    iss >> x >> y >> s >> dx >> dy;
+    ret.push_back({ x, y, s, dx, dy });
   }
+  return ret;
 }
 
 int main() {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
-  vector<double> map_waypoints_x;
-  vector<double> map_waypoints_y;
-  vector<double> map_waypoints_s;
-  vector<double> map_waypoints_dx;
-  vector<double> map_waypoints_dy;
-
-  ReadWaypoints(map_waypoints_x, map_waypoints_y, map_waypoints_s, map_waypoints_dx, map_waypoints_dy);
-  cout << map_waypoints_s.size() << "," << map_waypoints_x.size() << "," << map_waypoints_y.size() << endl;
+  Road road{ 3, 4, 60, "../data/highway_map.csv"};
+  //auto waypoints = ReadWaypoints();
+  cout << "#way points in map=" << road.waypoints.size() << endl;
   auto lane = 1;  auto ref_vel = 0.0; static const auto target_vel = 49.6;
 
   // h.onMessage([&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,&map_waypoints_dx,&map_waypoints_dy](uWS::WebSocket<uWS::SERVER> *ws, char *data, size_t length, uWS::OpCode opCode) {
@@ -242,6 +238,7 @@ int main() {
 
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
+          road.updateCarPositions(sensor_fusion);
 
           json msgJson;
 
@@ -249,21 +246,24 @@ int main() {
           vector<double> next_y_vals;
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-          vector<double> ptsx, ptsy;
+          vector<Point> pts;
           double ref_x = car_x, ref_y = car_y, ref_yaw = deg2rad(car_yaw);
+          Vehicle ego{ int(ceil(car_d / 4.0)), car_s, car_speed, 0 };
+          ego.x = car_x; ego.y = car_y; ego.yaw = ref_yaw;
+          road.add_ego(ego);
 
           if (prev_sz > 0) car_s = end_path_s;
           auto too_close = false;
 
-          for (const auto& oth : sensor_fusion) {
+          for (const auto& oth : sensor_fusion) { //id,x,y,vx,vy,s,d
             double oth_d = oth[6];
             //if (oth_d<(2 + 4*lane - 1.8) || oth_d>(2 + 4*lane + 1.8)) continue;
             double oth_vx = oth[3], oth_vy = oth[4], oth_s0 = oth[5], oth_s = oth[5];
             auto oth_speed = sqrt(oth_vx*oth_vx + oth_vy*oth_vy);
             oth_s += prev_sz*.02*oth_speed; // project where oth car will be; sensor_fusion is current, whereas prev_path is future state
-            cout << endl << "Oth Car: id=" << oth[0] << ", [oth,me] S=(" << oth[5] << ","  << j[1]["s"] << "). D=(" << oth[6] << "," << car_d
-                 << "). PROJ_S=(" << oth_s << "," << car_s << "). V=(" << oth_speed << "," << car_speed/2.24 << ").";
-            if (oth_d<(2 + 4*lane - 2) || oth_d>(2 + 4*lane + 2)) continue;
+            cout << endl << "Oth Car: id=" << oth[0] << ", [oth,me] S=(" << oth[5] << "," << j[1]["s"] << "). D=(" << oth[6] << "," << car_d
+              << "). PROJ_S=(" << oth_s << "," << car_s << "). V=(" << oth_speed << "," << car_speed / 2.24 << ").";
+            if (oth_d<(2 + 4 * lane - 2) || oth_d>(2 + 4 * lane + 2)) continue;
             cout << " *** in same lane ***";
             too_close = ((oth_s > car_s0) && ((oth_s - car_s) < 30.0)); // other car < 30m ahead
             if (too_close) {
@@ -277,31 +277,34 @@ int main() {
           cout << "too_close=" << too_close << ", ref_vel=" << ref_vel << endl;
 
           if (prev_sz < 2) { // if prev path is almost empty, use car as starting point
-            ptsx.push_back(car_x - cos(car_yaw)); // prev car point x, project back in time
-            ptsy.push_back(car_y - sin(car_yaw)); // prev car point y, project back in time
-            ptsx.push_back(car_x); ptsy.push_back(car_y);
-          } else { // use the previous path's end point as starting ref
+            pts.push_back({ car_x - cos(ref_yaw), car_y - sin(ref_yaw) }); // prev car point x, y project back in time
+            pts.push_back({ car_x, car_y });
+          }
+          else { // use the previous path's end point as starting ref
             ref_x = prev_path_x[prev_sz - 1];             ref_y = prev_path_y[prev_sz - 1];
             double ref_x_prev = prev_path_x[prev_sz - 2], ref_y_prev = prev_path_y[prev_sz - 2];
             ref_yaw = atan2(ref_y - ref_y_prev, ref_x - ref_x_prev);
 
-            ptsx.push_back(ref_x_prev); ptsy.push_back(ref_y_prev);
-            ptsx.push_back(ref_x);      ptsy.push_back(ref_y);
+            pts.push_back({ ref_x_prev, ref_y_prev });
+            pts.push_back({ ref_x,      ref_y });
           }
 
-          // get evenly spaced points
-          auto wp0 = getXY(car_s + 30, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          auto wp1 = getXY(car_s + 60, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          auto wp2 = getXY(car_s + 90, (2 + 4 * lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          ptsx.push_back(wp0[0]); ptsy.push_back(wp0[1]);
-          ptsx.push_back(wp1[0]); ptsy.push_back(wp1[1]);
-          ptsx.push_back(wp2[0]); ptsy.push_back(wp2[1]);
+          Vehicle ref{ 0, 0, 0, 0 }; ref.x = ref_x; ref.y = ref_y; ref.yaw = ref_yaw;
 
-          for (size_t i = 0; i < ptsx.size(); i++) { // translate to car's point of view
-            double shift_x = ptsx[i] - ref_x, shift_y = ptsy[i] - ref_y;
-            ptsx[i] = shift_x*cos(0 - ref_yaw) - shift_y*sin(0 - ref_yaw);
-            ptsy[i] = shift_x*sin(0 - ref_yaw) + shift_y*cos(0 - ref_yaw);
-            cout << "to fit #" << i << ": (" << ptsx[i] << "," << ptsy[i] << ")" << endl;
+          // get evenly spaced points
+          auto wp0 = road.getXY(car_s + 30, (2 + 4 * lane));
+          auto wp1 = road.getXY(car_s + 60, (2 + 4 * lane));
+          auto wp2 = road.getXY(car_s + 90, (2 + 4 * lane));
+          pts.push_back(wp0);
+          pts.push_back(wp1);
+          pts.push_back(wp2);
+
+          for (size_t i = 0; i < pts.size(); i++) { // translate to car's point of view
+            pts[i] = ref.toVehicleCoordinates(pts[i]);
+            //double shift_x = pts[i].x - ref_x, shift_y = pts[i].y - ref_y;
+            //pts[i].x = shift_x*cos(0 - ref_yaw) - shift_y*sin(0 - ref_yaw);
+            //pts[i].y = shift_x*sin(0 - ref_yaw) + shift_y*cos(0 - ref_yaw);
+            cout << "to fit #" << i << ": (" << pts[i].x << "," << pts[i].y << ")" << endl;
           }
 
           for (auto i = 0; i < prev_sz; i++) {
@@ -309,7 +312,7 @@ int main() {
             cout << "last pts #" << i << ": (" << next_x_vals[i] << "," << next_x_vals[i] << ")" << endl;
           }
 
-          tk::spline s; s.set_points(ptsx, ptsy);
+          auto s = calcSpline(pts);
           auto target_x = 30.0;
           auto target_y = s(target_x);
           auto target_dist = sqrt(target_x*target_x + target_y*target_y);
@@ -318,16 +321,17 @@ int main() {
           for (auto i = 1; i <= 50 - prev_sz; i++) {
             auto N = target_dist / (0.02*ref_vel / 2.24); // 0.02 seconds apart, convert to m/s
             auto x_pt = x_add_on + target_x / N;
-            auto y_pt = s(x_pt);
+            auto y_pt = s(x_lpt);
             x_add_on = x_pt;
 
             // translate back to global coords
-            auto x_ref = x_pt, y_ref = y_pt;
-            x_pt = x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw) + ref_x;
-            y_pt = x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw) + ref_y;
+            auto glb = ref.toGlobalCoordinates({ x_pt, y_pt });
+            //auto x_ref = x_pt, y_ref = y_pt;
+            //x_pt = x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw) + ref_x;
+            //y_pt = x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw) + ref_y;
 
-            next_x_vals.push_back(x_pt); next_y_vals.push_back(y_pt);
-            cout << "added pt #" << prev_sz + i << ": (" << x_pt << "," << y_pt << ")" << endl;
+            next_x_vals.push_back(glb.x); next_y_vals.push_back(glb.y);
+            cout << "added pt #" << prev_sz + i << ": (" << glb.x << "," << glb.y << ")" << endl;
           }
 
           //next_x_vals.clear(); next_y_vals.clear();

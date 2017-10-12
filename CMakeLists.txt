@@ -2,12 +2,12 @@ project(Path_Planning)
 
 cmake_minimum_required (VERSION 3.5)
 
-add_definitions(-std=c++11)
+#add_definitions(-std=c++11)
 
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
-set(sources src/main.cpp src/Vehicle.cpp src/cost_functions.cpp)
+set(sources src/main.cpp src/Vehicle.cpp src/cost_functions.cpp src/Road.cpp)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
@@ -25,4 +25,4 @@ link_directories(C:/Users/kswaroop/Source/Repos/vcpkg/installed/x86-windows/lib)
 
 add_executable(path_planning ${sources})
 
-target_link_libraries(path_planning libz ssl libuv uWS)
+target_link_libraries(path_planning zlib ssleay32 libuv uWS)

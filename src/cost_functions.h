@@ -17,10 +17,25 @@ struct trajdata {
   bool collides;
 };
 
-double change_lane_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<vector<int>>>& predictions, const trajdata& data);
-double distance_from_goal_lane(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<vector<int>>>& predictions, const trajdata& data);
-double inefficiency_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<vector<int>>>& predictions, const trajdata& data);
-double collision_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<vector<int>>>& predictions, const trajdata& data);
-double buffer_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<vector<int>>>& predictions, const trajdata& data);
+double change_lane_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data);
+double distance_from_goal_lane(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data);
+double inefficiency_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data);
+double collision_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data);
+double buffer_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data);
+
+
+#include <iostream>
+#include <fstream>
+#include <cmath>
+#include <vector>
+
+#include "Eigen-3.3/Eigen/Dense"
+
+
+using namespace std;
+using Eigen::MatrixXd;
+using Eigen::VectorXd;
+
+vector<double> JMT(vector< double> start, vector <double> end, double T);
 
 #endif
