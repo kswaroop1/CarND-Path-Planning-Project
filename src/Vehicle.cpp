@@ -18,7 +18,7 @@ Vehicle::Vehicle(int lane, double s, double v, double a) {
   this->s = s;
   this->v = v;
   this->a = a;
-  state = "CS";
+  behavior_state = "CS";
   max_acceleration = -1;
 
   x = y = vx = vy = yaw = 0.0;
@@ -29,8 +29,8 @@ Vehicle::~Vehicle() {}
 // TODO - Implement this method.
 void Vehicle::update_state(map<int, vector < Vehicle::snapshot > > predictions) {
   /*
-  Updates the "state" of the vehicle by assigning one of the
-  following values to 'self.state':
+  Updates the "behavior_state" of the vehicle by assigning one of the
+  following values to 'self.behavior_state':
 
   "KL" - Keep Lane
   - The vehicle will attempt to drive its target speed, unless there is
@@ -38,7 +38,7 @@ void Vehicle::update_state(map<int, vector < Vehicle::snapshot > > predictions) 
 
   "LCL" or "LCR" - Lane Change Left / Right
   - The vehicle will IMMEDIATELY change lanes and then follow longitudinal
-  behavior for the "KL" state in the new lane.
+  behavior for the "KL" behavior_state in the new lane.
 
   "PLCL" or "PLCR" - Prepare for Lane Change Left / Right
   - The vehicle will find the nearest vehicle in the adjacent lane which is
@@ -76,7 +76,7 @@ void Vehicle::update_state(map<int, vector < Vehicle::snapshot > > predictions) 
     }
   }
 
-  state = min_cost_state;
+  behavior_state = min_cost_state;
 }
 
 void Vehicle::configure(int target_speed, int lanes_available, int max_acceleration, int goal_lane, int goal_s) {
@@ -103,16 +103,17 @@ string Vehicle::display() {
 }
 
 void Vehicle::increment(int dt = 1) {
-  this->s += this->v * dt;
-  this->v += this->a * dt;
+  s += v * dt;
+  v += a * dt;
+  v = max(0.0, v);
 }
 
-Vehicle::snapshot Vehicle::state_at(int t) {
+Vehicle::snapshot Vehicle::snapshot_at(int t) {
   /*
-  Predicts state of vehicle in t seconds (assuming constant acceleration)
+  Predicts behavior_state of vehicle in t seconds (assuming constant acceleration)
   */
   auto s = this->s + this->v * t + this->a * t * t / 2;
-  auto v = this->v + this->a * t;
+  auto v = this->v + this->a * t; v = max(0.0, v);
   return { this->lane, s, v, this->a };
 }
 
@@ -120,8 +121,8 @@ bool Vehicle::collides_with(Vehicle other, int at_time) {
   /*
   Simple collision detection.
   */
-  auto check1 = state_at(at_time);
-  auto check2 = other.state_at(at_time);
+  auto check1 = snapshot_at(at_time);
+  auto check2 = other.snapshot_at(at_time);
   return (check1.lane == check2.lane) && (abs(check1.s - check2.s) <= L);
 }
 
@@ -143,21 +144,21 @@ Vehicle::collider Vehicle::will_collide_with(Vehicle other, int timesteps) {
 
 void Vehicle::realize_state(map<int, vector < Vehicle::snapshot > > predictions) {
   /*
-  Given a state, realize it by adjusting acceleration and lane.
+  Given a behavior_state, realize it by adjusting acceleration and lane.
   Note - lane changes happen instantaneously.
   */
-  string state = this->state;
-  if (state.compare("CS") == 0) {
+  string behavior_state = this->behavior_state;
+  if (behavior_state.compare("CS") == 0) {
     realize_constant_speed();
-  } else if (state.compare("KL") == 0) {
+  } else if (behavior_state.compare("KL") == 0) {
     realize_keep_lane(predictions);
-  } else if (state.compare("LCL") == 0) {
+  } else if (behavior_state.compare("LCL") == 0) {
     realize_lane_change(predictions, "L");
-  } else if (state.compare("LCR") == 0) {
+  } else if (behavior_state.compare("LCR") == 0) {
     realize_lane_change(predictions, "R");
-  } else if (state.compare("PLCL") == 0) {
+  } else if (behavior_state.compare("PLCL") == 0) {
     realize_prep_lane_change(predictions, "L");
-  } else if (state.compare("PLCR") == 0) {
+  } else if (behavior_state.compare("PLCR") == 0) {
     realize_prep_lane_change(predictions, "R");
   }
 }
@@ -272,20 +273,20 @@ vector<Vehicle::snapshot> Vehicle::generate_predictions(int horizon = 10) {
   vector<Vehicle::snapshot> predictions;
   for (int i = 0; i < horizon; i++)
   {
-    auto check1 = state_at(i);
+    auto check1 = snapshot_at(i);
     predictions.push_back(check1);
   }
   return predictions;
 }
 
-vector<Vehicle::snapshot> Vehicle::_trajectory_for_state(const string& state, map<int, vector<Vehicle::snapshot>> predictions, int horizon) {
+vector<Vehicle::snapshot> Vehicle::_trajectory_for_state(const string& behavior_state, map<int, vector<Vehicle::snapshot>> predictions, int horizon) {
   vector<snapshot> trajectory;
   snapshot snap{ *this };
   trajectory.push_back(snap);
 
   for (auto i = 0; i < horizon; i++) {
     Vehicle vv{ lane, s, v, a };
-    vv.state = state;
+    vv.behavior_state = behavior_state;
     vv.realize_state(predictions);
     vv.increment();
     trajectory.push_back(snapshot(vv));
@@ -353,13 +354,13 @@ trajdata get_helper_data(const Vehicle& vehicle, const vector<Vehicle::snapshot>
     accels.push_back(a);
     for (auto& vv : filtered) {
       auto v_id = vv.first; auto& v = vv.second;
-      auto state = v[i];
+      auto behavior_state = v[i];
       auto last_state = v[i - 1];
-      if (check_collision(t[i], last_state.s, state.s)) {
+      if (check_collision(t[i], last_state.s, behavior_state.s)) {
         collides = true;
         collides_at = i;
       }
-      auto dist = abs(state.s - s);
+      auto dist = abs(behavior_state.s - s);
       if (dist < closest_approach) closest_approach = dist;
     }
     //last_snap = t[i];

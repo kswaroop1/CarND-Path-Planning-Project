@@ -1,24 +1,21 @@
-#include <iostream>
 #include "Road.h"
 #include "Vehicle.h"
-#include <iostream>
 #include <math.h>
 #include <map>
 #include <string>
-#include <iterator>
 
 
 /**
 * Initializes Road
 */
-Road::Road(int num_lanes, int lane_width, int speed_limit, string map_file) {
+Road::Road(int num_lanes, int lane_width, int speed_limit, string map_file) : ptg(num_lanes, lane_width) {
   this->num_lanes = num_lanes;
   this->speed_limit = speed_limit;
   this->camera_center = this->update_width / 2;
   this->lane_width = lane_width;
 
   // The max s value before wrapping around the track back to 0
-  double max_s = 6945.554;
+  //double max_s = 6945.554;
 
   ifstream in_map_(map_file.c_str(), ifstream::in);
 
@@ -42,7 +39,7 @@ void Road::updateCarPositions(json sensor_fusion) {
     auto lane = int(ceil(oth_d / lane_width));
     Vehicle veh{ lane, oth_s, oth_v, 0.0 };
     veh.x = oth[1]; veh.y = oth[2]; veh.vx = oth_vx; veh.vy = oth_vy;
-    veh.state = "CS";
+    veh.behavior_state = "CS";
     vehicles.insert(pair<int, Vehicle>(oth_id, veh));
   }
 }
@@ -86,7 +83,7 @@ void Road::add_ego(Vehicle ego) { /*, vector<int> config_data) {
   Vehicle ego = Vehicle(lane_num, s, v, a);
   ego.configure(config_data);
 */
-  ego.state = "KL";
+  ego.behavior_state = "KL";
   this->vehicles.insert(std::pair<int, Vehicle>(ego_key, ego));
 }
 

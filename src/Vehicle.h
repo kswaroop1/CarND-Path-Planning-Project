@@ -33,14 +33,14 @@ public:
   int max_acceleration;
   int goal_lane;
   int goal_s;
-  string state;
+  string behavior_state;
 
   struct snapshot {
     int lane;
     double s, v, a;
-    string state;
+    string behavior_state;
     snapshot(int l1, double s1, double v1, double a1) : lane(l1), s(s1), v(v1), a(a1) {}
-    snapshot(const Vehicle& h) : lane(h.lane), s(h.s), v(h.v), a(h.a), state(h.state) {}
+    snapshot(const Vehicle& h) : lane(h.lane), s(h.s), v(h.v), a(h.a), behavior_state(h.behavior_state) {}
   };
 
   Vehicle(int lane, double s, double v, double a);
@@ -51,7 +51,7 @@ public:
   string display();
 
   void increment(int dt);
-  snapshot state_at(int t);
+  snapshot snapshot_at(int t);
 
   bool collides_with(Vehicle other, int at_time);
   collider will_collide_with(Vehicle other, int timesteps);

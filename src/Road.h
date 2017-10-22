@@ -1,19 +1,14 @@
 #ifndef ROAD_H
 #define ROAD_H
 #define _USE_MATH_DEFINES
-#include <iostream>
-#include <random>
-#include <sstream>
-#include <fstream>
-#include <math.h>
+#include <cmath>
 #include <vector>
-#include <set>
 #include <map>
 #include <string>
-#include <iterator>
 #include "WayPoint.h"
 #include "Vehicle.h"
 #include "json.hpp"
+#include "TrajectoryGenerator.h"
 
 using namespace std;
 
@@ -33,6 +28,8 @@ public:
   int speed_limit;
 
   int camera_center;
+
+  TrajectoryGenerator ptg;
 
   map<int, Vehicle> vehicles;
   int vehicles_added = 0;

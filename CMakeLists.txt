@@ -7,7 +7,7 @@ cmake_minimum_required (VERSION 3.5)
 set(CXX_FLAGS "-Wall")
 set(CMAKE_CXX_FLAGS, "${CXX_FLAGS}")
 
-set(sources src/main.cpp src/Vehicle.cpp src/cost_functions.cpp src/Road.cpp)
+set(sources src/main.cpp src/WayPoint.cpp src/Vehicle.cpp src/TrajectoryGenerator.cpp src/cost_functions.cpp src/Road.cpp)
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin") 
 
