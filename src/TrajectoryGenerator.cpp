@@ -54,6 +54,13 @@ triple JMT::state_at(const double t) const {
   return { f0(t), f1(t), f2(t) };
 }
 
+vector<double> JMT::f0_vals(double uptoT, double interval) const
+{
+  vector<double> ret;
+  for (auto t = 0.0; t < uptoT; t += interval) ret.push_back(f0(t));
+  return ret;
+}
+
 // from TrajectoryExercise2/helpers.py
 double traj_at::logistic(const double x) { return 2.0 / (1.0 + exp(-x)) - 1.0; }
 double toEquation(const vector<double>& coeffs, const double x) {
@@ -68,10 +75,10 @@ vector<double> differentiate(const vector<double>& coeffs) {
 }
 
 
-double traj_at::time_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::time_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   return tg::ptg_time_diff_cost * logistic(fabs(t - T) / T);
 }
-double traj_at::s_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::s_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   const auto target = tvehAt0.s.after(T) + delta.s;
   const auto actual = s_coeffs.state_at(T);
   auto cost = logistic(fabs(actual.a0 - target.a0) / tg::sigma_s[0]);
@@ -79,7 +86,7 @@ double traj_at::s_diff_cost(const state& tvehAt0, const state& delta, const doub
   cost += logistic(fabs(actual.a2 - target.a2) / tg::sigma_s[2]);
   return tg::ptg_s_diff_cost * cost;
 }
-double traj_at::d_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::d_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   const auto target = tvehAt0.d.after(T) + delta.d;
   const auto actual = d_coeffs.state_at(T);
   auto cost = logistic(fabs(actual.a0 - target.a0) / tg::sigma_d[0]);
@@ -87,26 +94,26 @@ double traj_at::d_diff_cost(const state& tvehAt0, const state& delta, const doub
   cost += logistic(fabs(actual.a2 - target.a2) / tg::sigma_d[2]);
   return tg::ptg_d_diff_cost * cost;
 }
-double traj_at::collision_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::collision_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   const auto cost = (tvehAt0.nearest_approach_to_any_vehicle(vehicles) < 2 * tg::vehicle_radius ? 1.0 : 0.0);
   return tg::ptg_collision_cost * cost;
 }
-double traj_at::buffer_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::buffer_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   return tg::ptg_buffer_cost * logistic(2 * tg::vehicle_radius / tvehAt0.nearest_approach_to_any_vehicle(vehicles));
 }
-double traj_at::stays_on_road_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::stays_on_road_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   return tg::ptg_stays_on_road_cost * 0;
 }
-double traj_at::exceeds_speed_limit_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::exceeds_speed_limit_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   return tg::ptg_exceeds_speed_cost * 0;
 }
-double traj_at::efficiency_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::efficiency_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   const auto avg_v = s_coeffs.f0(t) / t;
   const auto target = tvehAt0.s.after(t);
   const auto target_v = target.a0 / t;
   return tg::ptg_efficiency_cost * logistic(2 * (target_v - avg_v) / avg_v);
 }
-double traj_at::max_accel_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::max_accel_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   auto max_acc = std::numeric_limits<double>::min();
   for (auto i = 0; i<100; i++) {
     const auto acc = s_coeffs.f2(i*T / 100.0);
@@ -114,7 +121,7 @@ double traj_at::max_accel_cost(const state& tvehAt0, const state& delta, const d
   }
   return tg::ptg_max_accel_cost * (fabs(max_acc)> tg::max_accel ? 1 : 0);
 }
-double traj_at::total_accel_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::total_accel_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   auto total_acc = 0.0;
   const auto dt = T / 100;
   for (auto i = 0; i<100; i++) {
@@ -125,7 +132,7 @@ double traj_at::total_accel_cost(const state& tvehAt0, const state& delta, const
 
   return tg::ptg_total_accel_cost * logistic(acc_per_second / tg::expected_acc_in_one_sec);
 }
-double traj_at::max_jerk_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::max_jerk_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   auto max_jerk = std::numeric_limits<double>::min();
   for (auto i = 0; i<100; i++) {
     const auto jerk = s_coeffs.f3(i*T / 100.0);
@@ -133,7 +140,7 @@ double traj_at::max_jerk_cost(const state& tvehAt0, const state& delta, const do
   }
   return tg::ptg_max_jerk_cost * (fabs(max_jerk)>max_jerk ? 1 : 0);
 }
-double traj_at::total_jerk_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::total_jerk_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   auto total_jerk = 0.0;
   const auto dt = T / 100;
   for (auto i = 0; i<100; i++) {
@@ -144,7 +151,7 @@ double traj_at::total_jerk_cost(const state& tvehAt0, const state& delta, const 
 
   return tg::ptg_total_jerk_cost * logistic(jerk_per_second / tg::expected_jerk_in_one_sec);
 }
-double traj_at::calculate_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const {
+double traj_at::calculate_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const {
   return time_diff_cost(tvehAt0, delta, T, vehicles) +
     s_diff_cost(tvehAt0, delta, T, vehicles) +
     d_diff_cost(tvehAt0, delta, T, vehicles) +
@@ -159,14 +166,14 @@ double traj_at::calculate_cost(const state& tvehAt0, const state& delta, const d
     total_jerk_cost(tvehAt0, delta, T, vehicles);
 }
 
-TrajectoryGenerator::TrajectoryGenerator(int lane_width_, int num_lanes_) : lane_width(lane_width_), num_lanes(num_lanes_),
+TrajectoryGenerator::TrajectoryGenerator() :
   s_distribs{ nd{ 0.0, tg::sigma_s[0] }, nd{ 0.0, tg::sigma_s[1] }, nd{ 0.0, tg::sigma_s[2] } },
   d_distribs{ nd{ 0.0, tg::sigma_d[0] }, nd{ 0.0, tg::sigma_d[1] }, nd{ 0.0, tg::sigma_d[2] } }
 {}
 
-state TrajectoryGenerator::perturb_goal(const state& s) {
+tg_state TrajectoryGenerator::perturb_goal(const tg_state& s) {
   default_random_engine gen;
-  state pg{
+  tg_state pg{
     { s.s.a0 + s_distribs[0](gen), s.s.a1 + s_distribs[1](gen), s.s.a2 + s_distribs[2](gen) },
     { s.d.a0 + d_distribs[0](gen), s.d.a1 + d_distribs[1](gen), s.d.a2 + d_distribs[2](gen) }
   };
@@ -176,10 +183,10 @@ state TrajectoryGenerator::perturb_goal(const state& s) {
   return pg;
 }
 
-traj_at TrajectoryGenerator::PTG(const state& start, const state& targetAt0, const state& delta, const double T, const vector<state>& predictions) {
+traj_at TrajectoryGenerator::PTG(const tg_state& start, const tg_state& targetAt0, const tg_state& delta, const double T, const vector<tg_state>& predictions) {
   //# generate alternative goals
   //  all_goals = []
-  vector<tuple<state, double>> all_goals;
+  vector<tuple<tg_state, double>> all_goals;
   //  timestep = 0.5
   const auto timestep = 0.5;
   //  t = T - 4 * timestep
@@ -194,7 +201,7 @@ traj_at TrajectoryGenerator::PTG(const state& start, const state& targetAt0, con
     //    goal_s = target_state[:3]
     //    goal_d = target_state[3:]
     //    goals = [(goal_s, goal_d, t)]
-    vector<tuple<state, double>> goals;
+    vector<tuple<tg_state, double>> goals;
     goals.push_back({ target_state, t });
     //    for _ in range(N_SAMPLES) :
     for (auto i = 0; i< tg::n_samples; i++) {

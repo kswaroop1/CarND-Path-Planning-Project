@@ -15,28 +15,31 @@ struct JMT {
   double f2(const double t) const { return 2 * a2 + 3 * 2 * a3*t + 4 * 3 * a4*t*t + 5 * 4 * a5*t*t*t; }
   double f3(const double t) const { return 3 * 2 * a3 + 4 * 3 * 2 * a4*t + 5 * 4 * 3 * a5*t*t; }
   triple state_at(const double t) const;
+  vector<double> f0_vals(double uptoT, double interval) const;
 };
 
 struct traj_at {
   JMT s_coeffs, d_coeffs;
   double t;
 
-  double time_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double s_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double d_diff_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double collision_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double buffer_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double stays_on_road_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double exceeds_speed_limit_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double efficiency_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double max_accel_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double total_accel_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double max_jerk_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double total_jerk_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
-  double calculate_cost(const state& tvehAt0, const state& delta, const double T, const vector<state>& vehicles) const;
+  double time_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double s_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double d_diff_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double collision_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double buffer_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double stays_on_road_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double exceeds_speed_limit_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double efficiency_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double max_accel_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double total_accel_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double max_jerk_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double total_jerk_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
+  double calculate_cost(const tg_state& tvehAt0, const tg_state& delta, const double T, const vector<tg_state>& vehicles) const;
 
   // from TrajectoryExercise2/helpers.py
   static double logistic(double x);                        // { return 2.0 / (1.0 + exp(-x)) - 1.0; }
+
+  tuple<vector<double>, vector<double>> trajectory(double interval) const { return { s_coeffs.f0_vals(t, interval), d_coeffs.f0_vals(t, interval) }; }
 };
 
 // from TrajectoryExercise2/constants.py
@@ -74,15 +77,11 @@ namespace tg {
 struct TrajectoryGenerator {
   typedef normal_distribution<double> nd;
 
-  int lane_width;
-  int num_lanes;
+  TrajectoryGenerator();
+  traj_at PTG(const tg_state& start, const tg_state& targetAt0, const tg_state& delta, const double T, const vector<tg_state>& predictions);
 
-  TrajectoryGenerator(int lane_width_, int num_lanes_);
-  traj_at PTG(const state& start, const state& targetAt0, const state& delta, const double T, const vector<state>& predictions);
-
-  state perturb_goal(const state& s);
+  tg_state perturb_goal(const tg_state& s);
   nd s_distribs[3], d_distribs[3];
 };
 
 #endif
-

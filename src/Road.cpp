@@ -3,16 +3,16 @@
 #include <math.h>
 #include <map>
 #include <string>
-
+#include <vector>
+#include <fstream>
+#include <sstream>
+#include <iostream>
 
 /**
 * Initializes Road
 */
-Road::Road(int num_lanes, int lane_width, int speed_limit, string map_file) : ptg(num_lanes, lane_width) {
-  this->num_lanes = num_lanes;
-  this->speed_limit = speed_limit;
+Road::Road(string map_file) {
   this->camera_center = this->update_width / 2;
-  this->lane_width = lane_width;
 
   // The max s value before wrapping around the track back to 0
   //double max_s = 6945.554;
@@ -30,17 +30,33 @@ Road::Road(int num_lanes, int lane_width, int speed_limit, string map_file) : pt
 
 Road::~Road() {}
 
+//void Road::updateNewPathState(const jason& prev_path_x_, const jason& prev_path_y_, double end_path_s_, double end_path_d_)
+void Road::updateNewPathState(const vector<double>& prev_path_x_, const vector<double>&  prev_path_y_, double end_path_s_, double end_path_d_, double car_x_, double car_y_, double car_s_, double car_d_, double car_yaw_) {
+  //prev_path_x.clear(); prev_path_y.clear();
+  //auto sz = prev_path_x.size();
+  //for (auto i=0; i < sz; i++) {
+  //  prev_path_x.push_back(prev_path_x_[i]);
+  //  prev_path_y.push_back(prev_path_y_[i]);
+  //}
+  prev_path_x = prev_path_x_; prev_path_y = prev_path_y_;
+  end_path_s = end_path_s_; end_path_d = end_path_d_;
+  car_x = car_x_; car_y = car_y_; car_s = car_s_; car_d = car_d_;
+  car_yaw = car_yaw_;
+}
+
 void Road::updateCarPositions(json sensor_fusion) {
+  veh_states.clear();
   vehicles.clear();
   for (const auto& oth : sensor_fusion) { //id,x,y,vx,vy,s,d
-    int oth_id = oth[0];
+    auto oth_id = int(oth[0]);
     double oth_vx = oth[3], oth_vy = oth[4], oth_s = oth[5], oth_d = oth[6];
     auto oth_v = sqrt(oth_vx * oth_vx + oth_vy * oth_vy);
     auto lane = int(ceil(oth_d / lane_width));
-    Vehicle veh{ lane, oth_s, oth_v, 0.0 };
+    Vehicle veh{ lane, oth_s, oth_v, 0.0, oth_d };
     veh.x = oth[1]; veh.y = oth[2]; veh.vx = oth_vx; veh.vy = oth_vy;
     veh.behavior_state = "CS";
     vehicles.insert(pair<int, Vehicle>(oth_id, veh));
+    veh_states.push_back({ {oth_s, oth_v, 0.0},{oth_d, 0.0, 0.0} });
   }
 }
 
@@ -49,26 +65,57 @@ Vehicle Road::get_ego() {
 }
 
 
-void Road::advance() {
-  map<int, vector<Vehicle::snapshot > > predictions;
-  map<int, Vehicle>::iterator it = this->vehicles.begin();
+tg_state Road::GetBehavarialGoal() {
+  map<int, vector<lane_s>> predictions;
+  auto it = this->vehicles.begin();
   while (it != this->vehicles.end()) {
-    int v_id = it->first;
-    auto preds = it->second.generate_predictions(10);
-    predictions[v_id] = preds;
-    it++;
+    auto v_id = it->first;
+    predictions[v_id] = it->second.generate_predictions(2 * PLANNING_HORIZON);
+    ++it;
   }
   it = this->vehicles.begin();
   while (it != this->vehicles.end()) {
-    int v_id = it->first;
+    auto v_id = it->first;
     if (v_id == ego_key) {
       it->second.update_state(predictions);
       it->second.realize_state(predictions);
     }
     it->second.increment(1);
 
-    it++;
+    ++it;
   }
+  auto ego = get_ego();
+  return { {double(ego.goal.s), double(ego.goal.v), ego.goal.a}, {ego.goal.lane*lane_width - 2.0, 0.0, 0.0} };
+}
+
+tuple<vector<double>, vector<double>> Road::GetTrajectory(const traj_at& ptg_traj) {
+  auto ego = get_ego();
+  double ref_x = car_x, ref_y = car_y, ref_yaw = ego.yaw;
+  vector<double> x_pts, y_pts;
+  tie(x_pts, y_pts) = ptg_traj.trajectory(0.02); // 20 ms per point
+
+  Vehicle ref{ 0, 0, 0, 0, 0 }; ref.x = ref_x; ref.y = ref_y; ref.yaw = ref_yaw;
+  const auto prev_sz = prev_path_x.size();
+  const auto traj_sz = x_pts.size();
+  next_x_vals.clear(); next_y_vals.clear();
+
+  for (auto i = 0; i < prev_sz; i++) {
+    next_x_vals.push_back(prev_path_x[i]); next_y_vals.push_back(prev_path_y[i]);
+    cout << "PTG p#" << i << ": (" << next_x_vals[i] << "," << next_x_vals[i] << ")" << endl;
+  }
+
+  for (auto traj_idx=prev_sz; traj_idx < traj_sz && traj_idx<50; traj_idx++) {
+    const auto pt = ref.toGlobalCoordinates({ x_pts[traj_idx], y_pts[traj_idx] });
+    next_x_vals.push_back(pt.x); next_y_vals.push_back(pt.y);
+    cout << "PTG n#" << traj_idx << ": (" << pt.x << "," << pt.y << ")" << endl;
+  }
+  return { next_x_vals, next_y_vals };
+}
+
+tuple<vector<double>, vector<double>> Road::advance() {
+  auto goal = GetBehavarialGoal();
+  auto traj = ptg.PTG(ego_state, goal, { {-5,0,0}, {0,0,0} }, 10, veh_states);
+  return GetTrajectory(traj);
 }
 void Road::add_ego(Vehicle ego) { /*, vector<int> config_data) {
   map<int, Vehicle>::iterator it = this->vehicles.begin();
@@ -85,6 +132,7 @@ void Road::add_ego(Vehicle ego) { /*, vector<int> config_data) {
 */
   ego.behavior_state = "KL";
   this->vehicles.insert(std::pair<int, Vehicle>(ego_key, ego));
+  ego_state = { {ego.s, ego.v, ego.a},{ego.d, 0.0, 0.0} };
 }
 
 // Transform from Frenet s,d coordinates to Cartesian x,y
@@ -112,6 +160,13 @@ Point Road::getXY(double s, double d)
   double y = seg_y + d*sin(perp_heading);
 
   return { x,y };
+}
+
+tk::spline Road::calcSpline(const vector<double>& x_vals, const vector<double>& y_vals)
+{
+  tk::spline s;
+  s.set_points(x_vals, y_vals);
+  return s;
 }
 
 int Road::ClosestWaypoint(double x, double y)

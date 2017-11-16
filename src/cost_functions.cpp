@@ -1,6 +1,6 @@
 #include "cost_functions.h"
 
-double change_lane_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data) {
+double change_lane_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<lane_s>>& predictions, const trajdata& data) {
   //Penalizes lane changes AWAY from the goal lane and rewards lane changes TOWARDS the goal lane.
   auto proposed_lanes = data.end_lanes_from_goal;
   auto cur_lanes = trajectory[0].lane;
@@ -10,7 +10,7 @@ double change_lane_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>&
   //if (cost != 0) cout << "!! \n \ncost for lane change is " << cost << endl;
   return cost;
 }
-double distance_from_goal_lane(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data) {
+double distance_from_goal_lane(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<lane_s>>& predictions, const trajdata& data) {
   auto distance = abs(data.end_distance_to_goal);
   distance = max(distance, 1.0);
   auto time_to_goal = float(distance) / data.avg_speed;
@@ -19,15 +19,7 @@ double distance_from_goal_lane(const Vehicle& vehicle, const vector<Vehicle::sna
   auto cost = multiplier * REACH_GOAL;
   return cost;
 }
-double inefficiency_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data) {
-  auto speed = data.avg_speed;
-  auto target_speed = vehicle.target_speed;
-  auto diff = target_speed - speed;
-  auto pct = float(diff) / target_speed;
-  auto multiplier = pct * pct;
-  return multiplier * EFFICIENCY;
-}
-double collision_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data) {
+double collision_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<lane_s>>& predictions, const trajdata& data) {
   if (data.collides) {
     auto time_til_collision = data.collides_at;
     auto exponent = time_til_collision * time_til_collision;
@@ -36,9 +28,11 @@ double collision_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& t
   }
   return 0;
 }
-double buffer_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<Vehicle::snapshot>>& predictions, const trajdata& data) {
+double buffer_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<lane_s>>& predictions, const trajdata& data) {
   auto closest = data.closest_approach;
   if (closest == 0) return 10 * DANGER;
+
+  if (data.avg_speed <= 0.0) return 0;
 
   auto timesteps_away = closest / data.avg_speed;
   if (timesteps_away > DESIRED_BUFFER) return 0.0;
@@ -47,4 +41,13 @@ double buffer_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& traj
   multiplier *= multiplier;
   multiplier = 1.0 - multiplier;
   return multiplier * DANGER;
+}
+
+double inefficiency_cost(const Vehicle& vehicle, const vector<Vehicle::snapshot>& trajectory, const map<int, vector<lane_s>>& predictions, const trajdata& data) {
+  auto speed = data.avg_speed;
+  auto target_speed = vehicle.target_speed;
+  auto diff = target_speed - speed;
+  auto pct = float(diff) / target_speed;
+  auto multiplier = pct * pct;
+  return multiplier * EFFICIENCY;
 }

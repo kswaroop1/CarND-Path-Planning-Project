@@ -7,39 +7,41 @@
 #include <string>
 #include "WayPoint.h"
 #include "Vehicle.h"
-#include "json.hpp"
 #include "TrajectoryGenerator.h"
+#include "spline.h"
+#include "json.hpp"
 
 using namespace std;
-
-// for convenience
 using json = nlohmann::json;
-
-using namespace std;
 
 class Road {
 public:
   vector<WayPoint> waypoints;
   int update_width = 70;
-  int ego_key = -1;
-
-  int lane_width;
-  int num_lanes;
-  int speed_limit;
+  static constexpr int ego_key = -1;
 
   int camera_center;
 
+  vector<double> prev_path_x, prev_path_y, next_x_vals, next_y_vals;
+  double end_path_s, end_path_d;
+  double car_x, car_y, car_s, car_d, car_yaw;
+
   TrajectoryGenerator ptg;
 
+  vector<tg_state> veh_states;
+  tg_state ego_state;
   map<int, Vehicle> vehicles;
   int vehicles_added = 0;
 
-  Road(int num_lanes, int lane_width, int speed_limit, string map_file);
+  Road(string map_file);
   virtual ~Road();
 
-  void updateCarPositions(json sensor_fusion);
+  void updateNewPathState(const vector<double>& prev_path_x_, const vector<double>& prev_path_y_, double end_path_s_, double end_path_d_, double car_x_, double car_y_, double car_s_, double car_d_, double car_yaw_);
+  void updateCarPositions(nlohmann::json sensor_fusion);
   Vehicle get_ego();
-  void advance();
+  tg_state GetBehavarialGoal();
+  tuple<vector<double>, vector<double>> GetTrajectory(const traj_at& ptg_traj);
+  tuple<vector<double>, vector<double>> advance();
   void add_ego(Vehicle v);
 
   constexpr double pi() { return M_PI; }
@@ -51,5 +53,8 @@ public:
   int NextWaypoint(double x, double y, double theta);
   Point getFrenet(double x, double y, double theta);
   Point Road::getXY(double s, double d);
+  tk::spline calcSpline(const vector<double>& x_vals, const vector<double>& y_vals);
 };
+
+
 #endif

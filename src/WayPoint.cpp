@@ -1,7 +1,7 @@
 #include "WayPoint.h"
 #include "cost_functions.h"
 
-double state::nearest_approach(const state& o, const double T) const {
+double tg_state::nearest_approach(const tg_state& o, const double T) const {
   auto closest = 999999.0;
   for (auto i=0; i<100; i++) {
     auto t = T*i / 100.0;
@@ -15,7 +15,7 @@ double state::nearest_approach(const state& o, const double T) const {
   }
   return closest;
 }
-double state::nearest_approach_to_any_vehicle(const std::vector<state>& vehicles) const {
+double tg_state::nearest_approach_to_any_vehicle(const std::vector<tg_state>& vehicles) const {
   auto closest = 999999.0;
   for (auto& v :vehicles) {
     auto dist = nearest_approach(v , t);

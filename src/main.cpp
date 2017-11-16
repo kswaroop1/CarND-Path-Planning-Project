@@ -38,131 +38,6 @@ string hasData(string s) {
   return "";
 }
 
-double distance(double x1, double y1, double x2, double y2)
-{
-	return sqrt((x2-x1)*(x2-x1)+(y2-y1)*(y2-y1));
-}
-int ClosestWaypoint(double x, double y, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	double closestLen = 100000; //large number
-	int closestWaypoint = 0;
-
-	for(size_t i = 0; i < maps_x.size(); i++)
-	{
-		double map_x = maps_x[i];
-		double map_y = maps_y[i];
-		double dist = distance(x,y,map_x,map_y);
-		if(dist < closestLen)
-		{
-			closestLen = dist;
-			closestWaypoint = i;
-		}
-
-	}
-
-	return closestWaypoint;
-
-}
-
-int NextWaypoint(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-
-	int closestWaypoint = ClosestWaypoint(x,y,maps_x,maps_y);
-
-	double map_x = maps_x[closestWaypoint];
-	double map_y = maps_y[closestWaypoint];
-
-	double heading = atan2( (map_y-y),(map_x-x) );
-
-	double angle = abs(theta-heading);
-
-	if(angle > pi()/4)
-	{
-		closestWaypoint++;
-	}
-
-	return closestWaypoint;
-
-}
-
-// Transform from Cartesian x,y coordinates to Frenet s,d coordinates
-vector<double> getFrenet(double x, double y, double theta, const vector<double> &maps_x, const vector<double> &maps_y)
-{
-	int next_wp = NextWaypoint(x,y, theta, maps_x,maps_y);
-
-	int prev_wp;
-	prev_wp = next_wp-1;
-	if(next_wp == 0)
-	{
-		prev_wp  = maps_x.size()-1;
-	}
-
-	double n_x = maps_x[next_wp]-maps_x[prev_wp];
-	double n_y = maps_y[next_wp]-maps_y[prev_wp];
-	double x_x = x - maps_x[prev_wp];
-	double x_y = y - maps_y[prev_wp];
-
-	// find the projection of x onto n
-	double proj_norm = (x_x*n_x+x_y*n_y)/(n_x*n_x+n_y*n_y);
-	double proj_x = proj_norm*n_x;
-	double proj_y = proj_norm*n_y;
-
-	double frenet_d = distance(x_x,x_y,proj_x,proj_y);
-
-	//see if d value is positive or negative by comparing it to a center point
-
-	double center_x = 1000-maps_x[prev_wp];
-	double center_y = 2000-maps_y[prev_wp];
-	double centerToPos = distance(center_x,center_y,x_x,x_y);
-	double centerToRef = distance(center_x,center_y,proj_x,proj_y);
-
-	if(centerToPos <= centerToRef)
-	{
-		frenet_d *= -1;
-	}
-
-	// calculate s value
-	double frenet_s = 0;
-	for(int i = 0; i < prev_wp; i++)
-	{
-		frenet_s += distance(maps_x[i],maps_y[i],maps_x[i+1],maps_y[i+1]);
-	}
-
-	frenet_s += distance(0,0,proj_x,proj_y);
-
-	return {frenet_s,frenet_d};
-
-}
-
-// Transform from Frenet s,d coordinates to Cartesian x,y
-Point getXY(double s, double d, const vector<WayPoint>& waypoints)
-{
-	int prev_wp = -1;
-
-	while(s > waypoints[prev_wp+1].s && (prev_wp < (int)(waypoints.size()-1) ))
-	{
-		prev_wp++;
-	}
-
-	int wp2 = (prev_wp+1)% waypoints.size();
-
-	double heading = atan2((waypoints[wp2].y- waypoints[prev_wp].y),(waypoints[wp2].x- waypoints[prev_wp].x));
-	// the x,y,s along the segment
-	double seg_s = (s- waypoints[prev_wp].s);
-
-	double seg_x = waypoints[prev_wp].x+seg_s*cos(heading);
-	double seg_y = waypoints[prev_wp].y+seg_s*sin(heading);
-
-	double perp_heading = heading-pi()/2;
-
-	double x = seg_x + d*cos(perp_heading);
-	double y = seg_y + d*sin(perp_heading);
-
-	return {x,y};
-
-}
-
 tk::spline calcSpline(const vector<Point>& pts)
 {
   vector<double> x, y;
@@ -197,7 +72,7 @@ int main() {
   uWS::Hub h;
 
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
-  Road road{ 3, 4, 60, "../data/highway_map.csv"};
+  Road road{"../data/highway_map.csv"};
   //auto waypoints = ReadWaypoints();
   cout << "#way points in map=" << road.waypoints.size() << endl;
   auto lane = 1;  auto ref_vel = 0.0; static const auto target_vel = 49.6;
@@ -230,11 +105,15 @@ int main() {
           double car_speed = j[1]["speed"];
 
           // Previous path data given to the Planner
-          auto prev_path_x = j[1]["previous_path_x"]; int prev_sz = prev_path_x.size();
-          auto prev_path_y = j[1]["previous_path_y"];
+          auto jprev_path_x = j[1]["previous_path_x"]; int prev_sz = jprev_path_x.size();
+          auto jprev_path_y = j[1]["previous_path_y"];
+          vector<double> prev_path_x, prev_path_y;
+          for (double xx : jprev_path_x) prev_path_x.push_back(xx);
+          for (double yy : jprev_path_y) prev_path_y.push_back(yy);
           // Previous path's end s and d values 
           double end_path_s = j[1]["end_path_s"];
           double end_path_d = j[1]["end_path_d"];
+          road.updateNewPathState(prev_path_x, prev_path_y, end_path_s, end_path_d, car_x, car_y, car_s, car_d, deg2rad(car_yaw));
 
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
@@ -248,9 +127,12 @@ int main() {
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
           vector<Point> pts;
           double ref_x = car_x, ref_y = car_y, ref_yaw = deg2rad(car_yaw);
-          Vehicle ego{ int(ceil(car_d / 4.0)), car_s, car_speed, 0 };
-          ego.x = car_x; ego.y = car_y; ego.yaw = ref_yaw;
+          Vehicle ego{ int(ceil(car_d / 4.0)), car_s, car_speed, 0, car_d };
+          ego.d = car_d; ego.x = car_x; ego.y = car_y; ego.yaw = ref_yaw;
+          ego.target_speed = tg::max_speed; ego.max_acceleration = tg::max_accel;
           road.add_ego(ego);
+          //tie(next_x_vals, next_y_vals) = 
+          road.advance();
 
           if (prev_sz > 0) car_s = end_path_s;
           auto too_close = false;
@@ -289,7 +171,7 @@ int main() {
             pts.push_back({ ref_x,      ref_y });
           }
 
-          Vehicle ref{ 0, 0, 0, 0 }; ref.x = ref_x; ref.y = ref_y; ref.yaw = ref_yaw;
+          Vehicle ref{ 0, 0, 0, 0, 0 }; ref.x = ref_x; ref.y = ref_y; ref.yaw = ref_yaw;
 
           // get evenly spaced points
           auto wp0 = road.getXY(car_s + 30, (2 + 4 * lane));
